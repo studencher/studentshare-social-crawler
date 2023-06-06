@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "target": "es2017",
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "outDir": "dist",
+    "typeRoots": ["./@types"],
+    "baseUrl": ".",
+    "watch": false,
+    "paths": {
+      "*": ["*", "components/*"]
+    },
+    "types": ["node"]
+  },
+  "lib": ["esnext", "es2017"]
+}
