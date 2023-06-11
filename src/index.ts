@@ -4,5 +4,4 @@ const main = async () => {
     await faceBookCrawler.run();
 }
 
-
 main();

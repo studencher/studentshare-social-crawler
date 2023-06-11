@@ -9,8 +9,8 @@ export class FaceBookCrawler {
     private static readonly secondInMS = 1000;
     private static readonly randomSmallMin = 0;
     private static readonly randomSmallMax = 1;
-    private static readonly randomMediumMin = 5;
-    private static readonly randomMediumMax = 10;
+    private static readonly randomMediumMin = 2;
+    private static readonly randomMediumMax = 4;
     private static readonly randomHighMin = 10;
     private static readonly randomHighMax = 20;
     private static readonly randomVeryHighMin = 50;
@@ -24,20 +24,34 @@ export class FaceBookCrawler {
     private comment: string | undefined ;
     private keyWords: string[];
     private page: Page;
+    private urls: string[];
 
-    constructor({ logger, userName, password, privatePostsCollectionName, keyWords, comment = null  }:
+    constructor({ logger, userName, password, privatePostsCollectionName, keyWords, comment = null, urls = [] }:
                     { logger: Logger, userName: string, password: string,
-                        privatePostsCollectionName: string, keyWords: string[], comment?: string | undefined }) {
+                        privatePostsCollectionName: string, keyWords: string[], comment?: string | undefined, urls?: string[] }) {
         this.logger = logger;
         this.userName = userName;
         this.password = password;
         this.postsCollectionName = privatePostsCollectionName;
         this.keyWords = keyWords;
         this.comment = comment;
+        this.urls = urls;
     }
 
     private getFaceBookGroupsFeedUrl() {
         return "https://www.facebook.com/groups/feed/";
+    }
+
+    private getFaceBookFriendsFeedUrl() {
+        return "https://www.facebook.com/?filter=friends&sk=h_chr";
+    }
+
+    private getFriendsTabExpression() {
+        return "//div[@data-pagelet='ProfileTabs']//div[@role='tablist']//a[@role='tab']//span[contains(text(), 'חברים')]";
+    }
+
+    private getUserSideBarNavigationLinks() {
+        return "(//div[@role='navigation'])[position() = 3]//a[@role='link'][1]";
     }
 
     private getFaceBookLoginUrl() {
@@ -78,6 +92,10 @@ export class FaceBookCrawler {
 
     private getPostContentDivExpression(index: number) {
         return `${this.getFeedContainerPrefix(index)}//div[@data-ad-preview='message']`;
+    }
+
+    private getFundedDisclaimerSpanExpression(index: number) {
+        return `${this.getFeedContainerPrefix(index)}//span[contains(text(), 'ממומן')]`;
     }
 
     private getOpenCommentsModalDivExpression(index: number) {
@@ -151,7 +169,7 @@ export class FaceBookCrawler {
         await this.randomSleep(FaceBookCrawler.randomHighMin, FaceBookCrawler.randomHighMax);
         await this.pressKeyBoard(FaceBookCrawler.escapeKeyBoardKey);
 
-        await this.randomSleep(FaceBookCrawler.randomSmallMin, FaceBookCrawler.randomSmallMax);
+        await this.randomSleep(FaceBookCrawler.randomMediumMin, FaceBookCrawler.randomMediumMax);
     }
 
     private async pressKeyBoard(key: KeyInput) {
@@ -170,6 +188,7 @@ export class FaceBookCrawler {
             await this.typeInput(this.getUserNameInputExpression(), this.userName);
             await this.typeInput(this.getPasswordInputExpression(), this.password);
             await this.clickElement(this.getLoginButtonExpression());
+            await this.randomSleep(FaceBookCrawler.randomMediumMin, FaceBookCrawler.randomMediumMax);
         }catch (err) {
             this.logger.error(err);
         }
@@ -184,6 +203,7 @@ export class FaceBookCrawler {
 
     private async handlePost(postFeedIndex: number) {
         try{
+            await this.verifyPostNotFunded(postFeedIndex);
             const postContent = await this.getPostContentByIndex(postFeedIndex);
             this.verifyContentRelevant(postContent);
             await this.savePost(postFeedIndex);
@@ -194,6 +214,15 @@ export class FaceBookCrawler {
         }catch (err) {
             this.logger.error(`Could not save post ${postFeedIndex}, Error: ${err}`);
         }
+    }
+
+    private async verifyPostNotFunded(postFeedIndex: number) {
+        const fundedDisclaimerSpans = await this.page.$x(this.getFundedDisclaimerSpanExpression(postFeedIndex));
+        console.log(fundedDisclaimerSpans)
+        if(fundedDisclaimerSpans.length > 0)
+            throw new Error(`Post ${postFeedIndex} is funded, skipping...`);
+
+
     }
 
     private shouldAddComment() {
@@ -238,16 +267,21 @@ export class FaceBookCrawler {
 
 
     private async getCommentsContent(i: number) {
-        await this.clickElement(this.getOpenCommentsModalDivExpression(i));
-        const commentsElements = await this.page.$x(this.getCommentsDivsExpression());
-        const commentsContent = [];
-        for (const commentElement of commentsElements) {
-            const commentContent = await (await commentElement.getProperty('textContent')).jsonValue();
-            commentsContent.push(commentContent);
+        try {
+            await this.clickElement(this.getOpenCommentsModalDivExpression(i));
+            const commentsElements = await this.page.$x(this.getCommentsDivsExpression());
+            const commentsContent = [];
+            for (const commentElement of commentsElements) {
+                const commentContent = await (await commentElement.getProperty('textContent')).jsonValue();
+                commentsContent.push(commentContent);
+            }
+            this.logger.info(`Post ${i} comments content: ${commentsContent.join()}`);
+            await this.clickElement(this.getCloseCommentsModalDivExpression());
+            return commentsContent;
+        }catch (err) {
+            this.logger.error(`Could not get comments content, Error: ${err}`);
+            return [];
         }
-        this.logger.info(`Post ${i} comments content: ${commentsContent.join()}`);
-        await this.clickElement(this.getCloseCommentsModalDivExpression());
-        return commentsContent;
 
     }
 
@@ -266,20 +300,110 @@ export class FaceBookCrawler {
         this.setPage(page);
         await this.navigateToUrl(this.getFaceBookLoginUrl());
         await this.authenticatePage();
-        await this.navigateToUrl(this.getFaceBookGroupsFeedUrl());
-        for (let i = 2; i < 10000; i++) {
+        await this.handleUrlsFeed();
+    }
+
+    private async handleUrlsFeed() {
+        if(this.urls.length == 0){
+            await this.addDefaultUrls();
+        }
+        for (let i = 0; i < this.urls.length; i++) {
+            const url = this.urls[i];
+            if(i === 0)
+                await this.enqueueFriendsUrls(url)
+            await this.navigateToUrl(url);
+            await this.handleFeed();
+        }
+    }
+
+
+    private async addDefaultUrls() {
+        this.logger.info(`Adding default urls`);
+        const linksElement = await this.page.$x(this.getUserSideBarNavigationLinks());
+        const userProfileLinkElement = linksElement[0];
+        const hrefProperty = await userProfileLinkElement.getProperty('href');
+        const linkHref = await hrefProperty.jsonValue();
+        this.logger.info(`User profile link: ${linkHref}`);
+        if (typeof linkHref === "string")
+            this.urls.push(linkHref);
+        this.urls.push(this.getFaceBookFriendsFeedUrl());
+    }
+
+    private async handleFeed() {
+        for (let i = 2; i < 5; i++) {
             await this.handlePost(i);
             await this.scrollWindowDown();
         }
+    }
+
+    private async enqueueFriendsUrls(profileUrl: string) {
+        this.logger.info(`Enqueuing friends urls`);
+        await this.navigateToUserFriendsTab(profileUrl);
+
+    }
+
+
+    private async navigateToUserFriendsTab(profileUrl: string) {
+        await this.navigateToUrl(profileUrl);
+        await this.clickElement(this.getFriendsTabExpression());
+        const friendsUrl = await this.getFriendsUrl();
+        console.log(friendsUrl.length)
+    }
+
+    private async getFriendsUrl() : Promise<string[]> {
+        const friendsUrls = [];
+        let isSearchEnded = false;
+        let nullCounter = 0;
+        while (!isSearchEnded) {
+            try{
+                await this.scrollWindowDown();
+                const imgElements = await this.page.$x(this.getFriendImageExpression());
+                const newImgElements = imgElements.slice(friendsUrls.length + nullCounter);
+                if (newImgElements.length === 0)
+                    isSearchEnded = true;
+                const imgElementsSnapshot = Array.from(newImgElements);
+                for (let i = 0; i < imgElementsSnapshot.length; i++) {
+                    const imageElement = imgElementsSnapshot[i];
+
+                    const friendUrl = await this.extractedFriendUrl(imageElement);
+                    if (friendUrl != null)
+                        friendsUrls.push(friendUrl);
+                    else
+                        nullCounter++;
+                }
+                this.logger.info(`Overall friend urls counter: ${friendsUrls.length}`);
+            }catch (err) {
+                this.logger.error(`Could not get friends urls, Error: ${err}`);
+                isSearchEnded = true;
+            }
+
+        }
+        return friendsUrls;
+    }
+
+    private async extractedFriendUrl(imageElement: ElementHandle<Node>) {
+        const linkHref = await this.page.evaluate((element) => {
+            if (!(element instanceof HTMLElement))
+                return null;
+            const firstParentLink = element.closest('a');
+            return firstParentLink ? firstParentLink.href : null;
+        }, imageElement);
+        return linkHref;
+    }
+
+    private getFriendImageExpression() {
+        return "//div[@data-pagelet='ProfileAppSection_0']//img";
     }
 }
 
 export default new FaceBookCrawler({
     logger: new Logger("BrowserViewer"),
-    userName: faceBookUserName,
+    // userName: faceBookUserName,
+    userName: "elhararor207@gmail.com",
     password: faceBookPassword,
     privatePostsCollectionName: "Interesting-Posts",
-    keyWords: ["דרושים", "בלעדי","בלעדיות"]
+    keyWords: ["דרושים", "בלעדי","בלעדיות"],
+    urls: []
 })
 
 // TODO -

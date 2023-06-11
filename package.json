@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "link-utils": "cp -R ../studentcher-backend-shared-utils/src/* ./src/studentcher-shared-utils/ ",
     "dev": "tsc-watch --onSuccess \"node ./dist/index.js\""
   },
   "author": "",

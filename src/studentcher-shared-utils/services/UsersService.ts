@@ -10,7 +10,7 @@ import {Validations} from "../helpers/Validations";
 import {ServiceResponse} from "../models/ServiceResponse";
 import {Role} from "../entities/roles";
 import {IUserPrivateZone} from "../entities/userPrivateZone";
-import {CloudService, ICloudService} from "./CloudService";
+import {ICloudService} from "./CloudService";
 import {Constants} from "../helpers/Constants";
 import {IVideoMetaData, UserActivityMetaData} from "../entities/userActivityMetaData";
 import {IUserActivityVideoStatus} from "../entities/userActivityVideoStatus";

@@ -20,7 +20,6 @@ import SendData = ManagedUpload.SendData;
 import {file} from "../entities/file";
 const iv = Buffer.alloc(16, 0);
 import * as process from "process";
-import {CustomError} from "../models/CustomError";
 
 const getEncryptionKey = ()=>{
     const encryptionKey = process.env.ENCRYPTION_KEY_SECRET;
@@ -58,7 +57,7 @@ const s3v2 = new AWS.S3({
         secretAccessKey
     }
 });
-const costExplorer = new AWS.CostExplorer({ region });
+// const costExplorer = new AWS.CostExplorer({ region });
 
 type actionType = "READ" | "WRITE"
 
