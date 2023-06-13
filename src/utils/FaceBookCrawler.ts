@@ -87,7 +87,7 @@ export class FaceBookCrawler {
     }
 
     private getFeedContainerPrefix(index: number) {
-        return `//div[@role='feed']//div[${index}]`;
+        return `(//div[@role='feed'] | //div[@data-pagelet='ProfileTimeline'])//div[${index}]`;
     }
 
     private getPostContentDivExpression(index: number) {
@@ -218,7 +218,7 @@ export class FaceBookCrawler {
 
     private async verifyPostNotFunded(postFeedIndex: number) {
         const fundedDisclaimerSpans = await this.page.$x(this.getFundedDisclaimerSpanExpression(postFeedIndex));
-        console.log(fundedDisclaimerSpans)
+        this.logger.debug(`Funded disclaimer spans: ${fundedDisclaimerSpans.length}`);
         if(fundedDisclaimerSpans.length > 0)
             throw new Error(`Post ${postFeedIndex} is funded, skipping...`);
 
@@ -259,6 +259,7 @@ export class FaceBookCrawler {
 
     private async getPostContent(i: number) {
         const postElement = await this.page.$x(this.getPostContentDivExpression(i));
+        this.logger.debug(`Post ${i} element: ${postElement}`);
         const postContent =  await (await postElement[0].getProperty('textContent')).jsonValue();
         this.logger.info(`Post ${i} content: ${postContent}`);
         return postContent;
@@ -309,8 +310,8 @@ export class FaceBookCrawler {
         }
         for (let i = 0; i < this.urls.length; i++) {
             const url = this.urls[i];
-            if(i === 0)
-                await this.enqueueFriendsUrls(url)
+            // if(i === 0)
+            //     await this.enqueueFriendsUrls(url)
             await this.navigateToUrl(url);
             await this.handleFeed();
         }
@@ -330,7 +331,7 @@ export class FaceBookCrawler {
     }
 
     private async handleFeed() {
-        for (let i = 2; i < 5; i++) {
+        for (let i = 2; i < 15; i++) {
             await this.handlePost(i);
             await this.scrollWindowDown();
         }
@@ -339,49 +340,53 @@ export class FaceBookCrawler {
     private async enqueueFriendsUrls(profileUrl: string) {
         this.logger.info(`Enqueuing friends urls`);
         await this.navigateToUserFriendsTab(profileUrl);
-
+        const friendsUrl = await this.extractFriendsUrl();
+        this.logger.info(`Found #${friendsUrl.length} Friends urls.`);
     }
 
 
     private async navigateToUserFriendsTab(profileUrl: string) {
         await this.navigateToUrl(profileUrl);
         await this.clickElement(this.getFriendsTabExpression());
-        const friendsUrl = await this.getFriendsUrl();
-        console.log(friendsUrl.length)
     }
 
-    private async getFriendsUrl() : Promise<string[]> {
+    private async extractFriendsUrl() : Promise<string[]> {
         const friendsUrls = [];
         let isSearchEnded = false;
         let nullCounter = 0;
         while (!isSearchEnded) {
-            try{
-                await this.scrollWindowDown();
-                const imgElements = await this.page.$x(this.getFriendImageExpression());
-                const newImgElements = imgElements.slice(friendsUrls.length + nullCounter);
-                if (newImgElements.length === 0)
-                    isSearchEnded = true;
-                const imgElementsSnapshot = Array.from(newImgElements);
-                for (let i = 0; i < imgElementsSnapshot.length; i++) {
-                    const imageElement = imgElementsSnapshot[i];
-
-                    const friendUrl = await this.extractedFriendUrl(imageElement);
-                    if (friendUrl != null)
-                        friendsUrls.push(friendUrl);
-                    else
-                        nullCounter++;
-                }
-                this.logger.info(`Overall friend urls counter: ${friendsUrls.length}`);
-            }catch (err) {
-                this.logger.error(`Could not get friends urls, Error: ${err}`);
-                isSearchEnded = true;
-            }
-
+            await this.scrollWindowDown();
+            const scrolledFriendsUrls: string[] = await this.getScrolledFriendsUrls({friendsUrls, nullCounter});
+            friendsUrls.push(...scrolledFriendsUrls);
+            isSearchEnded = scrolledFriendsUrls.length === 0;
         }
+
         return friendsUrls;
     }
 
-    private async extractedFriendUrl(imageElement: ElementHandle<Node>) {
+    private async getScrolledFriendsUrls({friendsUrls, nullCounter}: { friendsUrls: string[]; nullCounter: number }): Promise<string[]> {
+        const addedFriendsUrls = [];
+        try {
+            const imgElements = await this.page.$x(this.getFriendImageExpression());
+            const newImgElements = imgElements.slice(friendsUrls.length + nullCounter);
+            const imgElementsSnapshot = Array.from(newImgElements);
+            for (let i = 0; i < imgElementsSnapshot.length; i++) {
+                const imageElement = imgElementsSnapshot[i];
+
+                const friendUrl = await this.extractFirstParentLinkUrl(imageElement);
+                if (friendUrl != null)
+                    addedFriendsUrls.push(friendUrl);
+                else
+                    nullCounter++;
+            }
+            this.logger.info(`Overall friend urls counter: ${friendsUrls.length}`);
+        } catch (err) {
+            this.logger.error(`Could not get friends urls, Error: ${err}`);
+        }
+        return addedFriendsUrls;
+    }
+
+    private async extractFirstParentLinkUrl(imageElement: ElementHandle<Node>) {
         const linkHref = await this.page.evaluate((element) => {
             if (!(element instanceof HTMLElement))
                 return null;

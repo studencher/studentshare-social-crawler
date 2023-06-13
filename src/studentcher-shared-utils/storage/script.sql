@@ -842,3 +842,38 @@ language plpgsql
      return calculated_grade;
  end;
  $$;
+
+create table crawler_comments (
+    id              UUID PRIMARY KEY DEFAULT  uuid_generate_v1(),
+    comment         TEXT,
+    description     TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC'::TEXT, NOW())
+);
+
+create table crawler_user_accounts (
+    id                              UUID PRIMARY KEY DEFAULT  uuid_generate_v1(),
+    description                     TEXT,
+    username                        TEXT,
+    password                        TEXT,
+    posts_collection_to_save_in     TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT timezone('UTC'::TEXT, NOW())
+);
+
+create table crawler_searches(
+    id                              UUID PRIMARY KEY DEFAULT  uuid_generate_v1(),
+    description                     TEXT,
+    keywords                        TEXT[],
+    created_at                      TIMESTAMP NOT NULL DEFAULT timezone('UTC'::TEXT, NOW())
+);
+
+
+create table crawlers(
+    id                              UUID PRIMARY KEY DEFAULT  uuid_generate_v1(),
+    user_account_id                 UUID,
+    search_id                       UUID,
+    comment_id                      UUID,
+    created_at                      TIMESTAMP NOT NULL DEFAULT timezone('UTC'::TEXT, NOW()),
+    FOREIGN KEY (user_account_id) REFERENCES crawler_user_accounts (id)  ON DELETE SET NULL,
+    FOREIGN KEY (search_id) REFERENCES crawler_searches (id)  ON DELETE SET NULL,
+    FOREIGN KEY (comment_id) REFERENCES crawler_comments (id)  ON DELETE SET NULL
+);
