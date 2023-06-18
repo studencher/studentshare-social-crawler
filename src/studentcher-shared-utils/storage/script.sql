@@ -869,6 +869,7 @@ create table crawler_searches(
 
 create table crawlers(
     id                              UUID PRIMARY KEY DEFAULT  uuid_generate_v1(),
+    description                     TEXT,
     user_account_id                 UUID,
     search_id                       UUID,
     comment_id                      UUID,
@@ -876,4 +877,24 @@ create table crawlers(
     FOREIGN KEY (user_account_id) REFERENCES crawler_user_accounts (id)  ON DELETE SET NULL,
     FOREIGN KEY (search_id) REFERENCES crawler_searches (id)  ON DELETE SET NULL,
     FOREIGN KEY (comment_id) REFERENCES crawler_comments (id)  ON DELETE SET NULL
+);
+
+create table crawler_statuses(
+    crawler_id                UUID NOT NULL,
+    created_at                TIMESTAMP NOT NULL DEFAULT timezone('UTC'::TEXT, NOW()),
+    ended_at                  TIMESTAMP,
+    FOREIGN KEY (crawler_id) REFERENCES crawlers (id)  ON DELETE SET NULL
+);
+
+create or replace view crawler_last_status as (
+    with crawler_max_created_at as (
+        select crawler_id, max(created_at) as timestamp
+        from crawler_statuses
+        group by
+        crawler_id  )
+    select cs.crawler_id, cs.created_at, cs.ended_at
+    from crawler_statuses cs
+    join crawler_max_created_at cmsa on
+        cmsa.crawler_id = cs.crawler_id and
+        cmsa.timestamp = cs.created_at
 );

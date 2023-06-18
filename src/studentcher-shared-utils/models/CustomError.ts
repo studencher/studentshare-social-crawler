@@ -9,7 +9,7 @@ export class CustomError extends Error implements ICustomerErrorDTO{
     status: number;
     extra: unknown | undefined;
 
-    constructor(message: string, status = 500, code = "000000") {
+    constructor(message: string, status = 400, code = "000000") {
         super();
         this.name = "CustomError";
         this.message = message;
