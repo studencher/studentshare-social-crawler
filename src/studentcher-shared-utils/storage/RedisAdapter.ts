@@ -45,4 +45,35 @@ export class RedisAdapter{
         this.logger.debug(`Publishing message using RedisAdapter: ${topic}, ${message}`);
         await this.client.publish(topic, message);
     }
+
+    async push({queue, message}): Promise<void>{
+        this.logger.debug(`Right pushing message using RedisAdapter: queue - ${queue}, message -${message}`);
+        await this.client.rpush(queue, message);
+    }
+
+    async pop({queue, options}:{queue: string, options?: {shouldBeBlocked: boolean, timeout?: number}}): Promise<string>{
+        // From redis documentation - 0 indicates no timeout, block indefinitely
+        this.logger.debug(`Pop message using RedisAdapter: queue - ${queue}, options -${JSON.stringify(options)}`);
+        if(options?.shouldBeBlocked) {
+            const popTimeout = options?.timeout != null ? options.timeout : 0;
+            const [_key, value] = await this.client.blpop(queue, popTimeout);
+            return value;
+        }
+        return this.client.lpop(queue);
+    }
+
+  async incrementHashProperty({hash, property, incrementBy = 1}: {hash: string, property: string, incrementBy?: number}): Promise<number>{
+        this.logger.debug(`Incrementing hash property using RedisAdapter: hash - ${hash}, property -${property}, incrementBy - ${incrementBy}`);
+        const result = await this.client.hincrby(hash, property, incrementBy);
+        this.logger.debug(`Incrementing hash property using RedisAdapter: hash - result - ${result}`);
+        return result;
+  }
+
+  async setHashProperty({hash, property, value}: {hash: string, property: string, value: unknown}): Promise<number>{
+        this.logger.debug(`Setting hash property using RedisAdapter: hash - ${hash}, property -${property}, value - ${value}`);
+        const stringValue = String(value);
+        const result = await this.client.hset(hash, property, stringValue);
+        this.logger.debug(`Setting hash property using RedisAdapter: hash - result - ${result}`);
+        return result;
+  }
 }

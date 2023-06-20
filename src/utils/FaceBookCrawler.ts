@@ -2,6 +2,9 @@ import puppeteer, {ElementHandle, KeyInput, Page} from "puppeteer";
 import {Logger} from "../studentcher-shared-utils/helpers/Logger";
 import {faceBookPassword, faceBookUserName} from "../secrets";
 import openAIClient, {OpenAIClient} from "./OpenAIClient";
+import {RedisAdapter} from "../studentcher-shared-utils/storage/RedisAdapter";
+import {Constants} from "../studentcher-shared-utils/helpers/Constants";
+import redisClient from "../storage/redisClient";
 
 export class FaceBookCrawler {
     private static readonly enterKeyBoardKey : KeyInput = 'Enter';
@@ -18,6 +21,7 @@ export class FaceBookCrawler {
 
     private openAiClient: OpenAIClient = openAIClient;
     private logger: Logger;
+    private redisClient: RedisAdapter;
     private userName: string;
     private password: string;
     private postsCollectionName: string;
@@ -26,10 +30,12 @@ export class FaceBookCrawler {
     private page: Page;
     private urls: string[];
 
-    constructor({ logger, userName, password, privatePostsCollectionName, keyWords, comment = null, urls = [] }:
-                    { logger: Logger, userName: string, password: string,
+    constructor({ logger, redisClient, userName, password, privatePostsCollectionName, keyWords, comment = null, urls = [] }:
+                    { logger: Logger, redisClient: RedisAdapter,
+                        userName: string, password: string,
                         privatePostsCollectionName: string, keyWords: string[], comment?: string | undefined, urls?: string[] }) {
         this.logger = logger;
+        this.redisClient = redisClient;
         this.userName = userName;
         this.password = password;
         this.postsCollectionName = privatePostsCollectionName;
@@ -296,7 +302,9 @@ export class FaceBookCrawler {
     }
 
     async run() {
-        this.logger.info(`BrowserViewer is starting`);
+        this.logger.info(`FaceBookCrawler is starting`);
+        const data = await this.redisClient.pop({queue: Constants.CRAWL_JOBS_QUEUE, options: {shouldBeBlocked: true}});
+        this.logger.info(`Data: ${data}`);
         const page = await this.generatePage();
         this.setPage(page);
         await this.navigateToUrl(this.getFaceBookLoginUrl());
@@ -330,7 +338,7 @@ export class FaceBookCrawler {
         this.urls.push(this.getFaceBookFriendsFeedUrl());
     }
 
-    private async handleFeed() {
+    private async   handleFeed() {
         for (let i = 2; i < 15; i++) {
             await this.handlePost(i);
             await this.scrollWindowDown();
@@ -403,7 +411,7 @@ export class FaceBookCrawler {
 
 export default new FaceBookCrawler({
     logger: new Logger("BrowserViewer"),
-    // userName: faceBookUserName,
+    redisClient,
     userName: "elhararor207@gmail.com",
     password: faceBookPassword,
     privatePostsCollectionName: "Interesting-Posts",

@@ -26,6 +26,8 @@ export abstract class Constants {
     }
 
     public static STUDY_CHANNELS_SUBSCRIPTION : string = "study_channels_subscription";
+    public static CRAWL_JOBS_QUEUE : string = "social_media_crawler_jobs_queue";
+    public static CRAWLERS_HASH : string = "social_media_crawlers_hash";
     public static STUDENT_NOTIFIER = 'student_notifier';
     public static votesSumDeltaAllowValues = [1, -1];
 
