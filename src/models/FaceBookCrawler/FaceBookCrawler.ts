@@ -5,6 +5,7 @@ import {CrawlJob, ICrawlJob} from "../../studentcher-shared-utils/entities/Crawl
 import crawlerStateWorker from "../CrawlerStateWorker";
 import browserSimulator, {IBrowserSimulator} from "../BrowserSimulator";
 import * as htmlExpressions from "./htmlExpressions";
+import {ICrawlerState} from "../../studentcher-shared-utils/entities/CrawlerState";
 
 export class FaceBookCrawler {
     private static readonly randomSmallMin = 0;
@@ -135,21 +136,28 @@ export class FaceBookCrawler {
 
     }
 
-
-    async run() {
-        this.logger.info(`FaceBookCrawler is starting`);
-        await this.browserSimulator.startSession();
-        if(this.crawlJob == null) {
-            const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob();
-            this.logger.info(`New crawl job: ${newCrawlJob.toString()}`);
-            this.setCrawlJob(newCrawlJob);
-        }
-        await this.browserSimulator.navigateToUrl(htmlExpressions.getFaceBookLoginUrl());
-        await this.authenticatePage();
-        await this.handleUrlsFeed();
+    private async loadCrawlerJob() {
+        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob();
+        this.logger.info(`New crawl job: ${newCrawlJob.toString()}`);
+        this.setCrawlJob(newCrawlJob);
     }
 
-    private async handleUrlsFeed() {
+    private clearCrawlerJob() {
+        this.crawlJob = null;
+    }
+
+    private async endCrawlerJobIfNeeded() {
+        const crawlerState: ICrawlerState = await this.crawlerStateWorker.getCrawlerState(this.crawlJob.getCrawlerId());
+        if(crawlerState.isDone) {
+            this.clearCrawlerJob();
+        }
+    }
+
+    private async handleCrawlerJob() {
+        if(this.crawlJob == null){
+            this.logger.warn(`Crawl job is not define, skipping...`);
+            return;
+        }
         const urls = [];
         const crawlJobUrl = this.crawlJob.getUrl();
         if(crawlJobUrl == null){
@@ -171,7 +179,6 @@ export class FaceBookCrawler {
         }
     }
 
-
     private async getDefaultUrls(): Promise<{userProfileUrl: string | null, friendsFeedUrl: string | null}> {
         this.logger.info(`Adding default urls`);
         const defaultUrls = {
@@ -189,8 +196,8 @@ export class FaceBookCrawler {
         return defaultUrls;
     }
 
-    private async   handleFeed() {
-        for (let i = 2; i < 15; i++) {
+    private async handleFeed() {
+        for (let i = 2; i < 150; i++) {
             await this.handlePost(i);
             await this.browserSimulator.scrollWindowDown();
         }
@@ -238,7 +245,7 @@ export class FaceBookCrawler {
     private async getScrolledFriendsUrls({friendsUrls, nullCounter}: { friendsUrls: string[]; nullCounter: number }): Promise<string[]> {
         const addedFriendsUrls = [];
         try {
-            const imgElements = await this.browserSimulator.getElementsByExpression(this.getFriendImageExpression());
+            const imgElements = await this.browserSimulator.getElementsByExpression(htmlExpressions.getFriendImageExpression());
             const newImgElements = imgElements.slice(friendsUrls.length + nullCounter);
             const imgElementsSnapshot = Array.from(newImgElements);
             for (let i = 0; i < imgElementsSnapshot.length; i++) {
@@ -257,8 +264,25 @@ export class FaceBookCrawler {
         return addedFriendsUrls;
     }
 
-    private getFriendImageExpression() {
-        return "//div[@data-pagelet='ProfileAppSection_0']//img";
+
+    async run() {
+        this.logger.info(`FaceBookCrawler is starting`);
+        await this.browserSimulator.startSession();
+        while(true){
+            try{
+                if(this.crawlJob == null) {
+                    await this.loadCrawlerJob();
+                }
+                await this.browserSimulator.navigateToUrl(htmlExpressions.getFaceBookLoginUrl());
+                await this.authenticatePage();
+                await this.handleCrawlerJob();
+            }catch (err){
+                this.logger.error(`Error: ${err.message}`);
+                await new Promise(resolve => setTimeout(resolve, FaceBookCrawler.randomMediumMax));
+            }finally {
+                this.endCrawlerJobIfNeeded();
+            }
+        }
     }
 }
 

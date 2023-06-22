@@ -85,4 +85,11 @@ export class RedisAdapter{
         this.logger.debug(`Setting hash property using RedisAdapter: hash - result - ${result}`);
         return result;
   }
+
+  async getHash({hash}): Promise<Record<string, string>>{
+        this.logger.debug(`Getting hash using RedisAdapter: hash - ${hash}`);
+        const result = await this.client.hgetall(hash);
+        this.logger.debug(`Getting hash using RedisAdapter: hash - result - ${JSON.stringify(result)}`);
+        return result;
+  }
 }

@@ -73,3 +73,7 @@ export function getCommentsDivsExpression() {
 export function getPostCommentContainerExpression(index: number) {
     return `${this.getFeedContainerPrefix(index)}//div[contains(text(), 'כתיבת תגובה ציבורית...')]`;
 }
+
+export function getFriendImageExpression(){
+    return `"//div[@data-pagelet='ProfileAppSection_0']//img";`
+}
