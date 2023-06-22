@@ -51,6 +51,15 @@ export class RedisAdapter{
         await this.client.rpush(queue, message);
     }
 
+    async pushMany({ queue, messages }: { queue: string; messages: string[] }): Promise<void> {
+        this.logger.debug(`Right pushing messages using RedisAdapter: queue - ${queue}, messages - ${messages}`);
+        const pipeline = this.client.pipeline();
+        for (const message of messages) {
+            pipeline.rpush(queue, message);
+        }
+        await pipeline.exec();
+    }
+
     async pop({queue, options}:{queue: string, options?: {shouldBeBlocked: boolean, timeout?: number}}): Promise<string>{
         // From redis documentation - 0 indicates no timeout, block indefinitely
         this.logger.debug(`Pop message using RedisAdapter: queue - ${queue}, options -${JSON.stringify(options)}`);
