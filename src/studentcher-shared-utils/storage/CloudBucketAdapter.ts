@@ -33,10 +33,12 @@ const getEncryptionKey = ()=>{
     return result;
 }
 
-const encryptionKey = getEncryptionKey();
-const algorithm = 'aes-256-cbc';
-const cipher = crypto.createCipheriv(algorithm, encryptionKey, iv);
-
+function getCipher() {
+    const encryptionKey = getEncryptionKey();
+    const algorithm = 'aes-256-cbc';
+    const cipher = crypto.createCipheriv(algorithm, encryptionKey, iv);
+    return cipher;
+}
 
 const bucketName = process.env.CLOUD_BUCKET_NAME || ""
 const accessKeyId = process.env.CLOUD_BUCKET_ACCESS_KEY || ""
@@ -64,7 +66,7 @@ type actionType = "READ" | "WRITE"
 export class CloudBucketAdapter{
     s3Client :S3Client;
     s3ClientV2 : AWS.S3;
-    static cipher = cipher;
+    static cipher = getCipher();
 
     constructor() {
         this.s3Client = s3

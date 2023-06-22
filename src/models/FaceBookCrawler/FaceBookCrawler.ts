@@ -146,11 +146,8 @@ export class FaceBookCrawler {
         this.crawlJob = null;
     }
 
-    private async endCrawlerJobIfNeeded() {
-        const crawlerState: ICrawlerState = await this.crawlerStateWorker.getCrawlerState(this.crawlJob.getCrawlerId());
-        if(crawlerState.isDone) {
-            this.clearCrawlerJob();
-        }
+    private async endCrawlerJob() {
+        await this.crawlerStateWorker.endCrawlerJob(this.crawlJob.getCrawlerId());
     }
 
     private async handleCrawlerJob() {
@@ -161,22 +158,41 @@ export class FaceBookCrawler {
         const urls = [];
         const crawlJobUrl = this.crawlJob.getUrl();
         if(crawlJobUrl == null){
-            const defaultUrls = await this.getDefaultUrls();
-            if(defaultUrls.userProfileUrl != null) {
-                urls.push(defaultUrls.userProfileUrl);
-                await this.enqueueFriendsUrls(defaultUrls.userProfileUrl);
-            }
-            if(defaultUrls.friendsFeedUrl != null)
-                urls.push(defaultUrls.friendsFeedUrl);
+            await this.defaultCrawlActions(urls);
         }
         else {
             urls.push(crawlJobUrl);
         }
+        await this.handleUrlsFeeds(urls);
+        const crawlerState = await this.crawlerStateWorker.getCrawlerState(this.crawlJob.getCrawlerId());
+        const newProfilesSearchedOverAll = await this.crawlerStateWorker.getIncrementStateProperty({
+            crawlerId: this.crawlJob.getCrawlerId(),
+            property: "profilesSearchedOverAll"
+        });
+        const isCrawlJobDone = this.crawlerStateWorker.isCrawlerJobDone({
+            crawlerState,
+            newProfilesSearchedOverAll
+        })
+        if(isCrawlJobDone)
+            await this.endCrawlerJob();
+    }
+
+    private async handleUrlsFeeds(urls: any[]) {
         for (let i = 0; i < urls.length; i++) {
             const url = urls[i];
             await this.browserSimulator.navigateToUrl(url);
             await this.handleFeed();
         }
+    }
+
+    private async defaultCrawlActions(urls: any[]) {
+        const defaultUrls = await this.getDefaultUrls();
+        if (defaultUrls.userProfileUrl != null) {
+            urls.push(defaultUrls.userProfileUrl);
+            await this.enqueueFriendsUrls(defaultUrls.userProfileUrl);
+        }
+        if (defaultUrls.friendsFeedUrl != null)
+            urls.push(defaultUrls.friendsFeedUrl);
     }
 
     private async getDefaultUrls(): Promise<{userProfileUrl: string | null, friendsFeedUrl: string | null}> {
@@ -264,6 +280,20 @@ export class FaceBookCrawler {
         return addedFriendsUrls;
     }
 
+    private async handleCrawlerJobError() {
+        const crawlerState: ICrawlerState = await this.crawlerStateWorker.getCrawlerState(this.crawlJob.getCrawlerId());
+        const newErrorCounts = await this.crawlerStateWorker.getIncrementStateProperty({
+                crawlerId: this.crawlJob.getCrawlerId(),
+                property: "errorsCount"
+            }
+        )
+        const isCrawlerJobDone = this.crawlerStateWorker.isCrawlerJobDone({
+            crawlerState,
+            newErrorCounts
+        })
+        if(isCrawlerJobDone)
+            await this.endCrawlerJob();
+    }
 
     async run() {
         this.logger.info(`FaceBookCrawler is starting`);
@@ -278,12 +308,14 @@ export class FaceBookCrawler {
                 await this.handleCrawlerJob();
             }catch (err){
                 this.logger.error(`Error: ${err.message}`);
+                await this.handleCrawlerJobError();
                 await new Promise(resolve => setTimeout(resolve, FaceBookCrawler.randomMediumMax));
             }finally {
-                this.endCrawlerJobIfNeeded();
+                this.clearCrawlerJob();
             }
         }
     }
+
 }
 
 export default new FaceBookCrawler({
