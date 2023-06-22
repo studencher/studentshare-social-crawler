@@ -132,7 +132,7 @@ export class FaceBookCrawler {
         }catch (err) {
             this.logger.error(`Could not get comments content, Error: ${err}`);
             return [];
-        }
+        }   
 
     }
 
