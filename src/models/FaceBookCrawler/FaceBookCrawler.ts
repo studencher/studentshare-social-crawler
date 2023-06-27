@@ -32,8 +32,9 @@ export class FaceBookCrawler {
         this.crawlJob = crawlJob;
     }
 
-    private async authenticatePage() {
+    public async authenticate() {
         try{
+            await this.browserSimulator.navigateToUrl(htmlExpressions.getFaceBookLoginUrl());
             await this.browserSimulator.typeInput(htmlExpressions.getUserNameInputExpression(), this.crawlJob.getUserName());
             await this.browserSimulator.typeInput(htmlExpressions.getPasswordInputExpression(), this.crawlJob.getPassword());
             await this.browserSimulator.clickElement(htmlExpressions.getLoginButtonExpression());
@@ -132,7 +133,7 @@ export class FaceBookCrawler {
         }catch (err) {
             this.logger.error(`Could not get comments content, Error: ${err}`);
             return [];
-        }   
+        }
 
     }
 
@@ -294,6 +295,9 @@ export class FaceBookCrawler {
         if(isCrawlerJobDone)
             await this.endCrawlerJob();
     }
+    private postErrorSleep() {
+        return new Promise(resolve => setTimeout(resolve, FaceBookCrawler.randomMediumMax));
+    }
 
     async run() {
         this.logger.info(`FaceBookCrawler is starting`);
@@ -303,13 +307,12 @@ export class FaceBookCrawler {
                 if(this.crawlJob == null) {
                     await this.loadCrawlerJob();
                 }
-                await this.browserSimulator.navigateToUrl(htmlExpressions.getFaceBookLoginUrl());
-                await this.authenticatePage();
+                await this.authenticate();
                 await this.handleCrawlerJob();
             }catch (err){
                 this.logger.error(`Error: ${err.message}`);
                 await this.handleCrawlerJobError();
-                await new Promise(resolve => setTimeout(resolve, FaceBookCrawler.randomMediumMax));
+                await this.postErrorSleep();
             }finally {
                 this.clearCrawlerJob();
             }

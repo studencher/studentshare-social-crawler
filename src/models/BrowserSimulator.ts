@@ -1,4 +1,5 @@
 import puppeteer, {ElementHandle, KeyInput, Page} from "puppeteer";
+
 import {Logger} from "../studentcher-shared-utils/helpers/Logger";
 
 export interface IBrowserSimulator {
@@ -26,6 +27,8 @@ export class BrowserSimulator{
     private static readonly randomHighMax = 20;
     private static readonly randomVeryHighMin = 50;
     private static readonly randomVeryHighMax = 100;
+    private static readonly fakeUserAgent = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36`
+    // private static readonly fakeUserAgent = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36`
 
     private logger: Logger;
     private page: Page;
@@ -52,6 +55,17 @@ export class BrowserSimulator{
         const browser = await puppeteer.launch({headless: false});
         const page = await browser.newPage();
         await page.setViewport({width: 1280, height: 800, deviceScaleFactor: 1});
+        await page.evaluateOnNewDocument((fakeUserAgent)=>{
+            const open = window.open;
+            window.open = (...args)=>{
+                const newPage = open(...args);
+                Object.defineProperty(newPage.navigator, 'userAgent', {get: ()=> fakeUserAgent});
+                return newPage;
+            }
+        }, BrowserSimulator.fakeUserAgent);
+        await page.setUserAgent(BrowserSimulator.fakeUserAgent);
+        await page.goto("https://i-know-you-faked-user-agent.glitch.me/new-window", {waitUntil: "domcontentloaded"});
+        // await browser.close();
         return page;
     }
 
@@ -62,6 +76,7 @@ export class BrowserSimulator{
         }
     }
     public async clickElement(elementExpression: string) {
+        this.logger.info(`Searching for element ${elementExpression}`);
         const element = (await this.page.$x(elementExpression))[0] as ElementHandle<Element> ;
         this.verifyElementFounded(element, elementExpression);
         this.logger.info(`Hovering element`);
