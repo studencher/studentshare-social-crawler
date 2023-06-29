@@ -23,3 +23,26 @@ export function getProfileNavSpanExpression() {
     return "//a[@role='link']//span[contains(text(), 'Profile')]/../../../../..//img";
 }
 
+export function getSearchLinkExpression() {
+    return "//a[@role='link']//span[contains(text(), 'Search')]/../../../../../../..//a";
+}
+
+export function getSearchInputExpression() {
+    return "//input[@aria-label='Search input']";
+}
+
+export function getFirstLinkFoundedExpression() {
+    return "(//input[@aria-label='Search input']/../../..//a[@role='link' and @tabindex='0'])[position() = 1]";
+}
+
+export function getProfileFollowersLinkExpression() {
+    return "//a[contains(text(), 'followers')]";
+}
+
+export function getFollowersLinksExpression() {
+    return "//div[@role='dialog']//a[not(descendant::img)]";
+}
+
+export function getFollowersLinksContainerExpression() {
+    return `(${getFollowersLinksExpression()})[position() = 1]/../../../../../../../../../../../../../..`;
+}

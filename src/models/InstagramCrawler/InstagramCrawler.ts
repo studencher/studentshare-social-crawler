@@ -5,11 +5,13 @@ import browserSimulator, {IBrowserSimulator} from "../BrowserSimulator";
 import * as htmlExpressions from "./htmlExpressions";
 import {FaceBookCrawler} from "../FaceBookCrawler/FaceBookCrawler";
 import crawlerStateWorker from "../CrawlerStateWorker";
-import {getProfileNavSpanExpression} from "./htmlExpressions";
+import {Constants} from "../../studentcher-shared-utils/helpers/Constants";
 
 export class InstagramCrawler {
-    private static readonly randomMediumMax = 4;
-    private static readonly randomMediumMin = 2;
+    private static readonly randomSmallMin = 2;
+    private static readonly randomSmallMax = 4;
+    private static readonly randomMediumMax = 10;
+    private static readonly randomMediumMin = 5;
     private logger: Logger;
     private crawlerStateWorker: ICrawlerStateWorker;
     private crawlJob?: ICrawlJob
@@ -34,7 +36,7 @@ export class InstagramCrawler {
     }
 
     private async loadCrawlerJob() {
-        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob();
+        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob(Constants.INSTAGRAM_CRAWL_JOB_QUEUE);
         this.logger.info(`New crawl job: ${newCrawlJob.toString()}`);
         this.setCrawlJob(newCrawlJob);
     }
@@ -43,14 +45,76 @@ export class InstagramCrawler {
         await this.browserSimulator.typeInput(htmlExpressions.getUserNameInputExpression(), this.crawlJob.getUserName());
         await this.browserSimulator.typeInput(htmlExpressions.getPasswordInputExpression(), this.crawlJob.getPassword());
         await this.browserSimulator.clickElement(htmlExpressions.getLoginButtonExpression());
-        await this.browserSimulator.clickElement(htmlExpressions.getNotNowButtonExpression());
         await this.browserSimulator.stimulateWaiting(InstagramCrawler.randomMediumMin, InstagramCrawler.randomMediumMax);
+        await this.browserSimulator.clickElement(htmlExpressions.getNotNowButtonExpression());
     }
+
     postErrorSleep() {
         return new Promise(resolve => setTimeout(resolve, InstagramCrawler.randomMediumMax));
     }
+
+    private async openFollowersModal() {
+        await this.browserSimulator.clickElement(htmlExpressions.getProfileFollowersLinkExpression());
+    }
+
+    private async clickFirstResult() {
+        await this.browserSimulator.clickElement(htmlExpressions.getFirstLinkFoundedExpression());
+    }
+
+    private async searchKeyword(keyword: string) {
+        await this.browserSimulator.clickElement(htmlExpressions.getSearchLinkExpression());
+        await this.browserSimulator.typeInput(htmlExpressions.getSearchInputExpression(), keyword);
+        await this.browserSimulator.stimulateWaiting(InstagramCrawler.randomSmallMin, InstagramCrawler.randomSmallMax);
+    }
+
     private async handleCrawlerJob() {
-        await this.browserSimulator.clickElement(htmlExpressions.getProfileNavSpanExpression());
+        const keywords = this.crawlJob.getKeywords();
+        if(keywords.length === 0) {
+            this.logger.info(`No keywords to search`);
+            return;
+        }
+        for(const keyword of keywords) {
+            await this.searchKeyword(keyword);
+            await this.clickFirstResult();
+            await this.openFollowersModal();
+            const followersLinks: string[] = await this.getFollowersLinks();
+            this.saveFollowersLinks(followersLinks);
+        }
+    }
+
+    private saveFollowersLinks(followersLinks: string[]) {
+        this.logger.info(`Stimulate saving of #${followersLinks.length} followers, data: ${JSON.stringify(followersLinks)}`);
+    }
+
+    private async getFollowersLinks(): Promise<string[]> {
+        const followersLinks = [];
+        let hasMoreFollowers = true;
+        let errorCount = 0;
+        while (hasMoreFollowers) {
+            const currentFollowersLinks = await this.browserSimulator.getElementsByExpression(htmlExpressions.getFollowersLinksExpression());
+            const lastFollowerIndex = followersLinks.length - 1;
+            const newFollowersLinks = followersLinks.length > 0 ? currentFollowersLinks.slice(lastFollowerIndex + errorCount) : currentFollowersLinks;
+            const addedFollowersSnapshot = Array.from(newFollowersLinks);
+            for (let i = 0; i < addedFollowersSnapshot.length; i++) {
+                const imageElement = addedFollowersSnapshot[i];
+                const friendUrl = await this.browserSimulator.extractClosestAncestorLinkUrl(imageElement);
+                // this.logger.debug(`Found friend url: ${friendUrl}`);
+                if (friendUrl != null)
+                    followersLinks.push(friendUrl);
+                else {
+                    this.logger.warn(`Could not extract friend url - !`);
+                    errorCount++;
+                }
+            }
+            hasMoreFollowers = newFollowersLinks.length > 0;
+            this.logger.info(`Found #${newFollowersLinks.length} new followers. overall #${followersLinks.length}`);
+            if (!hasMoreFollowers)
+                continue;
+            await this.browserSimulator.scrollContainerDown(htmlExpressions.getFollowersLinksContainerExpression());
+            await this.browserSimulator.stimulateWaiting(InstagramCrawler.randomSmallMin, InstagramCrawler.randomSmallMax);
+        }
+
+        return followersLinks;
     }
 
     async run() {
@@ -96,7 +160,7 @@ export default new InstagramCrawler({
             search: {
                 id: "1",
                 description: "Test Search",
-                keywords: ["Software", "Developer", "Programmer", "Engineer"],
+                keywords: ["intraposition_uwb_tech"],
             },
             comment: {
                 id: "1",

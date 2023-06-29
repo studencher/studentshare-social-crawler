@@ -6,6 +6,7 @@ import crawlerStateWorker from "../CrawlerStateWorker";
 import browserSimulator, {IBrowserSimulator} from "../BrowserSimulator";
 import * as htmlExpressions from "./htmlExpressions";
 import {ICrawlerState} from "../../studentcher-shared-utils/entities/CrawlerState";
+import {Constants} from "../../studentcher-shared-utils/helpers/Constants";
 
 export class FaceBookCrawler {
     private static readonly randomSmallMin = 0;
@@ -138,7 +139,7 @@ export class FaceBookCrawler {
     }
 
     private async loadCrawlerJob() {
-        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob();
+        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob(Constants.FACEBOOK_CRAWL_JOB_QUEUE);
         this.logger.info(`New crawl job: ${newCrawlJob.toString()}`);
         this.setCrawlJob(newCrawlJob);
     }
@@ -221,15 +222,15 @@ export class FaceBookCrawler {
     }
 
     private async distributeNewCrawlerJobs(friendsUrl: string[]) {
-        const crawlerJobs = [];
+        const crawlJobs: ICrawlJob[] = [];
         for (const friendUrl of friendsUrl) {
             const friendCrawlJob = new CrawlJob({
                 crawler: this.crawlJob.getCrawlerCopy(),
                 url: friendUrl
             });
-            crawlerJobs.push(friendCrawlJob);
+            crawlJobs.push(friendCrawlJob);
         }
-        await this.crawlerStateWorker.pushManyCrawlJobs(crawlerJobs);
+        await this.crawlerStateWorker.pushManyCrawlJobs({crawlJobs, queue: Constants.FACEBOOK_CRAWL_JOB_QUEUE});
     }
 
     private async enqueueFriendsUrls(profileUrl: string) {
@@ -268,7 +269,7 @@ export class FaceBookCrawler {
             for (let i = 0; i < imgElementsSnapshot.length; i++) {
                 const imageElement = imgElementsSnapshot[i];
 
-                const friendUrl = await this.browserSimulator.extractFirstParentLinkUrl(imageElement);
+                const friendUrl = await this.browserSimulator.extractClosestAncestorLinkUrl(imageElement);
                 if (friendUrl != null)
                     addedFriendsUrls.push(friendUrl);
                 else

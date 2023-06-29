@@ -6,7 +6,9 @@ export interface IBrowserSimulator {
     getElementsByExpression(expression: string): Promise<ElementHandle<Node>[]>;
     stimulateWaiting(min: number, max: number): Promise<void>;
     scrollWindowDown(): Promise<void>;
-    extractFirstParentLinkUrl(mageElement: ElementHandle<Node>): Promise<string>;
+    scrollContainerDown(containerExpression: string): Promise<void>;
+    extractClosestAncestorLinkUrl(element: ElementHandle<Node>): Promise<string>;
+    hoverElement({elementExpression, element}: {elementExpression?: string, element?: ElementHandle<Node>}): Promise<void>;
     clickElement(elementExpression: string): Promise<void>;
     typeInput(expression: string, textToType: string): Promise<void>;
     pressEnter(): Promise<void>;
@@ -75,16 +77,31 @@ export class BrowserSimulator{
             throw new Error(`Could not find element ${elementExpression}`);
         }
     }
+
+    private async extractNodeElement(elementExpression: string): Promise<ElementHandle<Element>> {
+        return (await this.page.$x(elementExpression))[0] as ElementHandle<Element>;
+    }
+
     public async clickElement(elementExpression: string) {
         this.logger.info(`Searching for element ${elementExpression}`);
-        const element = (await this.page.$x(elementExpression))[0] as ElementHandle<Element> ;
+        const element = await this.extractNodeElement(elementExpression);
+        this.verifyElementFounded(element, elementExpression);
+        await this.hoverElement({element});
+        this.logger.info(`Clicking element`);
+        await element.click();
+        await this.randomSleep(BrowserSimulator.randomMediumMax, BrowserSimulator.randomMediumMax);
+    }
+
+    public async hoverElement({elementExpression, element}: {elementExpression?: string, element?: ElementHandle<Element>}) {
+        if (element == null && elementExpression == null) {
+            throw new Error(`Either element or elementExpression must be provided`);
+        }
+        if (element == null)
+            element = await this.extractNodeElement(elementExpression);
         this.verifyElementFounded(element, elementExpression);
         this.logger.info(`Hovering element`);
         await element.hover();
         await this.randomSleep(BrowserSimulator.randomSmallMin, BrowserSimulator.randomSmallMax);
-        this.logger.info(`Clicking element`);
-        await element.click();
-        await this.randomSleep(BrowserSimulator.randomMediumMax, BrowserSimulator.randomMediumMax);
     }
 
     public async typeInput(expression: string, textToType: string) {
@@ -143,7 +160,20 @@ export class BrowserSimulator{
         await this.randomSleep(BrowserSimulator.randomMediumMin, BrowserSimulator.randomMediumMax);
     }
 
-    public async extractFirstParentLinkUrl(imageElement: ElementHandle<Node>): Promise<string> {
+    public async scrollContainerDown(containerExpression: string) {
+        this.logger.info(`Scrolling container '${containerExpression}' down...`);
+
+        await this.page.evaluate((selector) => {
+            const container = document.evaluate(selector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as HTMLElement;
+            if (container) {
+                container.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }
+        }, containerExpression);
+
+        await this.randomSleep(BrowserSimulator.randomMediumMin, BrowserSimulator.randomMediumMax);
+    }
+
+    public async extractClosestAncestorLinkUrl(imageElement: ElementHandle<Node>): Promise<string> {
         const linkHref = await this.page.evaluate((element) => {
             if (!(element instanceof HTMLElement))
                 return null;

@@ -5,6 +5,7 @@ import browserSimulator, {IBrowserSimulator} from "../BrowserSimulator";
 import * as htmlExpressions from "./htmlExpressions";
 import {FaceBookCrawler} from "../FaceBookCrawler/FaceBookCrawler";
 import crawlerStateWorker from "../CrawlerStateWorker";
+import {Constants} from "../../studentcher-shared-utils/helpers/Constants";
 
 export class TikTokCrawler{
     private static readonly randomMediumMax = 4;
@@ -33,7 +34,7 @@ export class TikTokCrawler{
     }
 
     private async loadCrawlerJob() {
-        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob();
+        const newCrawlJob = await this.crawlerStateWorker.blockPopCrawlJob(Constants.TIKTOK_CRAWL_JOB_QUEUE);
         this.logger.info(`New crawl job: ${newCrawlJob.toString()}`);
         this.setCrawlJob(newCrawlJob);
     }
